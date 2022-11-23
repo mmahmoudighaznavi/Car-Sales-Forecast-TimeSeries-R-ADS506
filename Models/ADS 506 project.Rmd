@@ -1,0 +1,120 @@
+---
+title: "ADS 506- Car Sales Project"
+output: word_document
+date: "2022-11-15"
+---
+
+```{r}
+install.packages("fpp2")
+library(fpp2)
+library(readr)
+library(forecast)
+library(zoo)
+```
+```{r}
+car_sales <- read_csv("monthly-car-sales.csv",show_col_types = FALSE)
+#change the name of column
+colnames(car_sales) <- c("Month", "Car_Sales")
+View(car_sales)
+```
+
+```{r}
+car_sales.ts <- ts(car_sales$Car_Sales, start=c(1960,1), end=c(1968,12), frequency=12)
+```
+```{r}
+#partition data
+ValidLength <- 12
+TrainLength <- length(car_sales.ts) - ValidLength
+Train <- window(car_sales.ts,end = c(1960, TrainLength))
+Valid <- window(car_sales.ts, start = c(1960, TrainLength + 1), end = c(1980, TrainLength + ValidLength))
+```
+
+  
+```{r}
+autoplot(Train, series="Train")+
+  autolayer(Valid, series="Valid")+
+  labs(title="Car Sales Time Series",
+       x="Year", y="Car Sales")
+
+```
+```{r}
+# naive model
+n_model <- naive(Train, h = 12, level = 95)
+
+autoplot(Train) +
+  autolayer(n_model, color = "#006d2c", series = "Naive") +
+  autolayer(Valid, color = "blue", series = "Actual")
+
+```
+```{r}
+sn_model <- snaive(Train, h = 12)
+
+autoplot(Train) +
+  autolayer(sn_model, color = "#006d2c", series = "Seasonal Naive") +
+  autolayer(Valid, color = "blue", series = "Actual")
+```
+```{r}
+st_model <- tslm(Train ~ trend + season)
+
+st_forecast <- forecast(st_model, h = 11)
+
+autoplot(Train) +
+  autolayer(st_forecast, color = "#006d2c", series = "season trend") +
+  autolayer(Valid, color = "blue", series = "Actual")
+
+```
+```{r}
+accuracy(n_model)
+accuracy(sn_model)
+accuracy(st_forecast)
+```
+```{r}
+car_sales.ma <- rollmean(car_sales.ts, k = 3, align = "right")
+
+autoplot(car_sales.ts, series = "Actual") +
+  autolayer(car_sales.ma, series = "MovingAvg") +
+  theme_classic()
+```
+```{r}
+exp_smooth.model <- ses(Train, alpha = .8, level = c(.95))
+exp_smooth.pred <- forecast(exp_smooth.model, h = 10)
+
+autoplot(car_sales.ts, series = "actual") +
+  autolayer(exp_smooth.pred, series = "predicted", alpha = .4) +
+  theme_classic()
+```
+```{r}
+accuracy(car_sales.ts, car_sales.ma)
+```
+```{r}
+accuracy(exp_smooth.model)
+```
+RMSE of the Training Set:
+Naive: 3249.349
+Seasonal Naive: 1983.602
+Regression season trend: 1341.994
+Moving Average: 2627.067 
+Exponential Smoothing: 3393.987
+
+Random Walk:
+```{r}
+arima_1 <- arima(car_sales.ts, order=c(1,0,0))
+arima_1
+```
+```{r}
+acf(diff(car_sales.ts, lag=1), main="ACF plot for lag 1 series")
+```
+The AR 1 Coefficient is 0.7320 is closer to 1, but the autocorrelations of the
+differenced series is not closer to zero, with all bars not within the
+threshold this infers that it is not random.
+
+
+```{r}
+#ACF plot
+acf(car_sales.ts,lag.max = 36)
+```
+There is strong positive autocorrelation at lags 12, 24, and 36 in monthly data wich will reflect an annual seasonality. It means values during a given month each year are positively correlated. 
+```{r}
+pacf(car_sales.ts, lag.max = 36)
+```
+The PACF shows that there is a seasonal lag at 12.
