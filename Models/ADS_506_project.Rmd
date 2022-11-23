@@ -12,7 +12,7 @@ library(forecast)
 library(zoo)
 ```
 ```{r}
-car_sales <- read_csv("monthly-car-sales.csv",show_col_types = FALSE)
+car_sales <- read_csv("C:\\Users\\maha.jayapal\\Downloads\\monthly-car-sales.csv",show_col_types = FALSE)
 #change the name of column
 colnames(car_sales) <- c("Month", "Car_Sales")
 View(car_sales)
@@ -47,6 +47,7 @@ autoplot(Train) +
 
 ```
 ```{r}
+#seasonal naive
 sn_model <- snaive(Train, h = 12)
 
 autoplot(Train) +
@@ -54,6 +55,7 @@ autoplot(Train) +
   autolayer(Valid, color = "blue", series = "Actual")
 ```
 ```{r}
+#season trend
 st_model <- tslm(Train ~ trend + season)
 
 st_forecast <- forecast(st_model, h = 11)
