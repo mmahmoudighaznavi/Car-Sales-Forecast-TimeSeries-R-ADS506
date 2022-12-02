@@ -1,2 +1,2 @@
 # ADS506FinalProject
-Marketing Campaign data from Kaggle
+The dataset “Monthly Car Sales in Quebec 1960” was obtained from Kaggle.

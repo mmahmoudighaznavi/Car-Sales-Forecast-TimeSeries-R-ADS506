@@ -1,0 +1,55 @@
+---
+title: "506_final_project_EDA"
+output: word_document
+date: "2022-12-02"
+---
+
+```{r}
+library(fpp2)
+library(readr)
+library(forecast)
+library(zoo)
+library(AICcmodavg)
+```
+```{r}
+car_sales <- read_csv("C:\\Users\\maha.jayapal\\Downloads\\monthly-car-sales.csv",show_col_types = FALSE)
+#change the name of column
+colnames(car_sales) <- c("Month", "Car_Sales")
+View(car_sales)
+```
+
+```{r}
+car_sales.ts <- ts(car_sales$Car_Sales, start=c(1960,1), end=c(1968,12), frequency=12)
+```
+```{r}
+autoplot(car_sales.ts)
+```
+Random Walk:
+```{r}
+arima_1 <- arima(car_sales.ts, order=c(1,0,0))
+arima_1
+```
+```{r}
+acf(diff(car_sales.ts, lag=1), main="ACF plot for lag 1 series")
+```
+The AR 1 Coefficient is 0.7320 is closer to 1, but the autocorrelations of the
+differenced series is not closer to zero, with all bars not within the
+threshold this infers that it is not random.
+
+```{r}
+#ACF plot
+acf(car_sales.ts,lag.max = 36)
+```
+There is strong positive autocorrelation at lags 12, 24, and 36 in monthly data wich will reflect an annual seasonality. It means values during a given month each year are positively correlated. 
+```{r}
+pacf(car_sales.ts, lag.max = 36)
+```
+The PACF shows that there is a seasonal lag at 12.
+
+```{r}
+car_sales.ts
+```
+
+
+
+
