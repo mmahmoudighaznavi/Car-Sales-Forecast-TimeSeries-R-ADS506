@@ -5,11 +5,11 @@ date: "2022-11-15"
 ---
 
 ```{r}
-install.packages("fpp2")
 library(fpp2)
 library(readr)
 library(forecast)
 library(zoo)
+library(AICcmodavg)
 ```
 ```{r}
 car_sales <- read_csv("C:\\Users\\maha.jayapal\\Downloads\\monthly-car-sales.csv",show_col_types = FALSE)
@@ -65,11 +65,14 @@ autoplot(Train) +
   autolayer(Valid, color = "blue", series = "Actual")
 
 ```
+
 ```{r}
 accuracy(n_model)
 accuracy(sn_model)
 accuracy(st_forecast)
 ```
+
+
 ```{r}
 car_sales.ma <- rollmean(car_sales.ts, k = 3, align = "right")
 
@@ -120,3 +123,43 @@ There is strong positive autocorrelation at lags 12, 24, and 36 in monthly data 
 pacf(car_sales.ts, lag.max = 36)
 ```
 The PACF shows that there is a seasonal lag at 12.
+
+```{r}
+car_sales.ts
+```
+
+
+```{r}
+#forecast for next 10 years
+final_arima <- arima(car_sales.ts, order = c(2 , 1, 5 ), seasonal = list(order= c(1 , 1, 1), period=12))
+#summary(final_arima)
+#sarima.for(car_sales.ts,120,2,1,5,1,1,1,12)
+forecast_10 <- forecast(final_arima, h=120, level=0)
+plot(forecast_10)
+```
+```{r}
+autoplot(car_sales.ts) +
+  autolayer(forecast_10, color = "blue", series = "ARIMA") +
+  theme_classic()
+
+```
+```{r}
+accuracy(final_arima)
+```
+
+
+```{r}
+#combine train and validation
+my_final_model <- arima(car_sales.ts, order = c(2 , 1, 6 ), seasonal = c(1 , 1, 1))
+my_final_model
+summary(my_final_model)
+#forecast next 10 years
+forecast_10 <- forecast(my_final_model, h=120, level=0)
+forecast_10
+#plot
+autoplot(forecast_10)+
+  theme_classic() 
+```
+
+
+
