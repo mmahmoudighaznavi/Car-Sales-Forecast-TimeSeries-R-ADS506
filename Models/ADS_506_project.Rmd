@@ -5,161 +5,423 @@ date: "2022-11-15"
 ---
 
 ```{r}
+#load necessary packages
+set.seed(506)
 library(fpp2)
 library(readr)
 library(forecast)
 library(zoo)
-library(AICcmodavg)
-```
-```{r}
-car_sales <- read_csv("C:\\Users\\maha.jayapal\\Downloads\\monthly-car-sales.csv",show_col_types = FALSE)
-#change the name of column
+
+
+
+#Import data set
+
+car_sales <- read_csv("monthly-car-sales.csv")
+head(car_sales)
+
+#change the column name and remove spaces
 colnames(car_sales) <- c("Month", "Car_Sales")
-View(car_sales)
+
+#convert to time series
+car_sales.ts <- ts(car_sales$Car_Sales, start=c(1960,1),frequency=12)
+autoplot(car_sales.ts)
+
+#check if there are trend and seasonality in our time series
+#decompose
+components = decompose(car_sales.ts)
+plot(components)
+
 ```
+There is a strong upward trend and also seasonal pattern is rise and fall in data values that repeats after regular intervals.
+
 
 ```{r}
-car_sales.ts <- ts(car_sales$Car_Sales, start=c(1960,1), end=c(1968,12), frequency=12)
-```
-```{r}
-#partition data
+#partition data to train and validation
+#consider last full year for validation set
 ValidLength <- 12
 TrainLength <- length(car_sales.ts) - ValidLength
 Train <- window(car_sales.ts,end = c(1960, TrainLength))
 Valid <- window(car_sales.ts, start = c(1960, TrainLength + 1), end = c(1980, TrainLength + ValidLength))
-```
+
 
   
-```{r}
+
 autoplot(Train, series="Train")+
   autolayer(Valid, series="Valid")+
   labs(title="Car Sales Time Series",
        x="Year", y="Car Sales")
-
 ```
+
+- Modeling:
+
+a) Naive model:
+
 ```{r}
 # naive model
 n_model <- naive(Train, h = 12, level = 95)
 
-autoplot(Train) +
-  autolayer(n_model, color = "#006d2c", series = "Naive") +
-  autolayer(Valid, color = "blue", series = "Actual")
 
+#forecast validation set 
+n_model_forecast <- forecast(n_model, ValidLength)
+accuracy(n_model_forecast, Valid)
+
+#plot
+autoplot(Train, series="Training") +
+  autolayer(n_model_forecast, series="Naive Model") +
+  autolayer(Valid, series = "Validation")+
+  theme_classic()
 ```
+b) Seasonal naive model:
+
 ```{r}
+#we add seasonal to our naive model
 #seasonal naive
 sn_model <- snaive(Train, h = 12)
 
-autoplot(Train) +
-  autolayer(sn_model, color = "#006d2c", series = "Seasonal Naive") +
-  autolayer(Valid, color = "blue", series = "Actual")
+
+#forecast validation set 
+sn_model_forecast <- forecast(sn_model, h=12)
+accuracy(sn_model_forecast, Valid)
+
+#plot
+autoplot(Train, series="Training") +
+  autolayer(sn_model_forecast, series="seasonal Naive Model") +
+  autolayer(Valid, series = "Validation")+
+  theme_classic()
 ```
+
+Comparing RMSE and MAPE between naive and seasonal naive shows that seasonal naive performs much better due to existence of seasonality.
+
+c) regression season trend model:
+
 ```{r}
-#season trend
+#regression season trend model
+
 st_model <- tslm(Train ~ trend + season)
 
-st_forecast <- forecast(st_model, h = 11)
 
-autoplot(Train) +
-  autolayer(st_forecast, color = "#006d2c", series = "season trend") +
-  autolayer(Valid, color = "blue", series = "Actual")
-
-```
-
-```{r}
-accuracy(n_model)
-accuracy(sn_model)
-accuracy(st_forecast)
-```
+#forecast validation set
+st_forecast <- forecast(st_model, h = 12)
+accuracy(st_forecast, Valid)
 
 
-```{r}
-car_sales.ma <- rollmean(car_sales.ts, k = 3, align = "right")
-
-autoplot(car_sales.ts, series = "Actual") +
-  autolayer(car_sales.ma, series = "MovingAvg") +
+#plot
+autoplot(Train, series="Training") +
+  autolayer(st_forecast, series="Regression Model") +
+  autolayer(Valid, series = "Validation")+
   theme_classic()
 ```
+We have a better RMSE and MAPE compared to seasonal naive model.
+
+d) moving average
 ```{r}
+#moving average
+car_sales.ma <- rollmean(Train, k = 4, align = "right")
+
+
+#forecast validation set
+ma_forecast <- forecast(car_sales.ma, h=12)
+accuracy(ma_forecast, Valid)
+
+#plot
+autoplot(Train, series="Training") +
+  autolayer(ma_forecast, series="Moving Avg Model") +
+  autolayer(Valid, series = "Validation")+
+  theme_classic()
+```
+Moving average is not a good fit for our data set.
+
+e) exponential smooth
+
+```{r}
+#exponential smooth
 exp_smooth.model <- ses(Train, alpha = .8, level = c(.95))
+
+#forecast
 exp_smooth.pred <- forecast(exp_smooth.model, h = 10)
+accuracy(exp_smooth.pred, Valid)
 
-autoplot(car_sales.ts, series = "actual") +
-  autolayer(exp_smooth.pred, series = "predicted", alpha = .4) +
-  theme_classic()
-```
-```{r}
-accuracy(car_sales.ts, car_sales.ma)
-```
-```{r}
-accuracy(exp_smooth.model)
-```
-RMSE of the Training Set:
-Naive: 3249.349
-Seasonal Naive: 1983.602
-Regression season trend: 1341.994
-Moving Average: 2627.067 
-Exponential Smoothing: 3393.987
-
-Random Walk:
-```{r}
-arima_1 <- arima(car_sales.ts, order=c(1,0,0))
-arima_1
-```
-```{r}
-acf(diff(car_sales.ts, lag=1), main="ACF plot for lag 1 series")
-```
-The AR 1 Coefficient is 0.7320 is closer to 1, but the autocorrelations of the
-differenced series is not closer to zero, with all bars not within the
-threshold this infers that it is not random.
-
-
-```{r}
-#ACF plot
-acf(car_sales.ts,lag.max = 36)
-```
-There is strong positive autocorrelation at lags 12, 24, and 36 in monthly data wich will reflect an annual seasonality. It means values during a given month each year are positively correlated. 
-```{r}
-pacf(car_sales.ts, lag.max = 36)
-```
-The PACF shows that there is a seasonal lag at 12.
-
-```{r}
-car_sales.ts
-```
-
-
-```{r}
-#forecast for next 10 years
-final_arima <- arima(car_sales.ts, order = c(2 , 1, 5 ), seasonal = list(order= c(1 , 1, 1), period=12))
-#summary(final_arima)
-#sarima.for(car_sales.ts,120,2,1,5,1,1,1,12)
-forecast_10 <- forecast(final_arima, h=120, level=0)
-plot(forecast_10)
-```
-```{r}
-autoplot(car_sales.ts) +
-  autolayer(forecast_10, color = "blue", series = "ARIMA") +
+#plot
+autoplot(Train, series="Training") +
+  autolayer(exp_smooth.pred, series="Exp Smooth Model") +
+  autolayer(Valid, series = "Validation")+
   theme_classic()
 
 ```
+Same as moving average model, exponential smooth make the RMSE and MAPE number larger. 
+
+
+
+
+f) Arima model
+
+
+
 ```{r}
-accuracy(final_arima)
+#create a residual analysis function
+residual.analysis <- function(model, std = TRUE){
+  #install.packages("TSA")
+  library(TSA)
+  
+  if (std == TRUE){
+    res.model = rstandard(model)
+  }else{
+    res.model = residuals(model)
+  }
+  par(mfrow=c(3,2))
+  plot(res.model,type='o',ylab='Standardized residuals', main="Time series plot of standardized residuals")
+  abline(h=0)
+  hist(res.model,main="Histogram of standardized residuals")
+  qqnorm(res.model,main="QQ plot of standardized residuals")
+  qqline(res.model, col = 2)
+  acf(res.model,main="ACF of standardized residuals")
+  print(shapiro.test(res.model))
+  k=0
+ 
+  autoplot(res.model, lag.max = length(model$residuals)-1 , StartLag = k + 1, k = 0, SquaredQ = FALSE)
+}
 ```
+
+
+- Auto Arima
+```{r}
+#auto-arima
+my_auto_arima <- auto.arima(Train)
+
+my_auto_arima
+
+#forecast
+auto_arima.forecast <- forecast(my_auto_arima, h = 12)
+accuracy(auto_arima.forecast, Valid)
+
+
+#ACF and PACF
+par(mfrow=c(1,2))
+acf(my_auto_arima$residuals, lag.max = 36)
+pacf(my_auto_arima$residuals, lag.max = 36)
+
+#plot
+autoplot(Train, series="Training") +
+  autolayer(auto_arima.forecast, series="Auto Arima Model") +
+  autolayer(Valid, series = "Validation")+
+  theme_classic()
+
+
+```
+
+Auto arima model works much better compared to previous models. Auto arima components are (2,0,0)(0,1,1).
+still there are some significant spikes due to ACF and PACF plots.
+
+
+
+```{r}
+#ACF and PACF plot
+par(mfrow=c(1,2))
+acf(Train,lag.max = 60)
+pacf(Train, lag.max = 60)
+```
+
+
+
+There is strong positive autocorrelation at lags 12, 24, and 36 in monthly data which will reflect an annual seasonality. It means values during a given month each year are positively correlated. The PACF shows that there is a seasonal lag at 12.
+
+The seasonal ARIMA model incorporates both non-seasonal and seasonal factors in multiplicative model.
+
+lets find out best (p, d, q)x(P, D, Q) values.
+first we take a seasonal and non seasonal difference of our train data set, because we have significant spikes in our lags. 
+```{r}
+#seasonal difference
+par(mfrow=c(1,2))
+acf(diff(diff(Train, lag=12)), lag.max = 60)
+pacf(diff(diff(Train, lag=12)), lag.max = 60)
+```
+We took 1 seasonal and 1 non-seasonal difference. so the d and D are equal to 1.
+p is AR component, and we take a look at PACF plot to find a seasonal P component. we have just 1 seasonal spike. so, P is 1. for non-seasonal we look at the spikes before first season in PACF plot, so, p is 2.
+For q or MA part we look at ACF plot. for seasonal we have 1 spike, and for non-seasonal we have 2 spikes. 
+
+So, lets start with (2 , 1, 2)x(1 , 1, 1)
+```{r}
+my_arima1 <- arima(Train, order = c(2 , 1, 2), seasonal = c(1 , 1, 1))
+my_arima1
+sqrt(mean(my_arima1$residuals^2))
+
+#ACF & PACF
+
+par(mfrow=c(1,2))
+acf(my_arima1$residuals, lag.max = 36)
+pacf(my_arima1$residuals, lag.max = 36)
+
+#forecast
+arima1.forecast <- predict(my_arima1 , n.ahead=12)$pred
+accuracy(arima1.forecast, Valid)
+
+#plot
+autoplot(Train, series="Training") +
+  autolayer(arima1.forecast, series="Arima1 Model") +
+  autolayer(Valid, series = "Validation")+
+  theme_classic()
+
+
+
+```
+
+
+we will increase the MA component.  
+```{r}
+
+my_arima2 <- arima(Train, order = c(2 , 1, 3), seasonal = c(1 , 1, 1))
+my_arima2
+sqrt(mean(my_arima2$residuals^2))
+
+#ACF & PACF
+
+par(mfrow=c(1,2))
+acf(my_arima2$residuals, lag.max = 36)
+pacf(my_arima2$residuals, lag.max = 36)
+
+
+#forecast
+arima2.forecast <- predict(my_arima2 , n.ahead=12)$pred
+accuracy(arima2.forecast, Valid)
+#plot
+autoplot(Train, series="Training") +
+  autolayer(arima2.forecast, series="Arima2 Model") +
+  autolayer(Valid, series = "Validation")+
+  theme_classic()
+
+
+```
+Arima1 model performs slightly better than Arima2.
+
+```{r}
+my_arima3 <- arima(Train, order = c(2 , 1, 4), seasonal = c(1 , 1, 1))
+my_arima3
+sqrt(mean(my_arima3$residuals^2))
+
+#ACF & PACF
+
+par(mfrow=c(1,2))
+acf(my_arima3$residuals, lag.max = 36)
+pacf(my_arima3$residuals, lag.max = 36)
+
+
+#forecast
+arima3.forecast <- predict(my_arima3 , n.ahead=12)$pred
+accuracy(arima3.forecast, Valid)
+#plot
+autoplot(Train, series="Training") +
+  autolayer(arima3.forecast, series="Arima3 Model") +
+  autolayer(Valid, series = "Validation")+
+  theme_classic()
+
+
+```
+```{r}
+my_arima4 <- arima(Train, order = c(2 , 1, 5), seasonal = c(1 , 1, 1))
+my_arima4
+sqrt(mean(my_arima4$residuals^2))
+
+#ACF & PACF
+
+par(mfrow=c(1,2))
+acf(my_arima4$residuals, lag.max = 36)
+pacf(my_arima4$residuals, lag.max = 36)
+
+
+#forecast
+arima4.forecast <- predict(my_arima2 , n.ahead=12)$pred
+accuracy(arima4.forecast, Valid)
+#plot
+autoplot(Train, series="Training") +
+  autolayer(arima4.forecast, series="Arima4 Model") +
+  autolayer(Valid, series = "Validation")+
+  theme_classic()
+
+
+```
+```{r}
+my_arima5 <- arima(Train, order = c(2 , 1, 6), seasonal = c(1 , 1, 1))
+my_arima5
+sqrt(mean(my_arima5$residuals^2))
+
+#ACF & PACF
+
+par(mfrow=c(1,2))
+acf(my_arima5$residuals, lag.max = 36)
+pacf(my_arima5$residuals, lag.max = 36)
+
+
+#forecast
+arima5.forecast <- predict(my_arima5 , n.ahead=12)$pred
+accuracy(arima5.forecast, Valid)
+
+#plot
+autoplot(Train, series="Training") +
+  autolayer(arima5.forecast, series="Arima5 Model") +
+  autolayer(Valid, series = "Validation")+
+  theme_classic()
+
+
+```
+
+```{r}
+sort.score <- function(x, score = "aic"){
+  if (score == "aic"){
+    x[with(x, order(AIC)),]
+  
+  } else {
+    warning('score = "x" only accepts valid arguments "aic" ')
+  }
+}
+
+sc.AIC=AIC(my_arima1, my_arima2, my_arima3, my_arima4, my_arima5, my_auto_arima)
+
+
+
+sort.score(sc.AIC, score = "aic")
+```
+best AIC belongs to my_arima3, my_arima4, and my_arima5 models. Since, the RMSE for validation set in my_arima4 is much better than my_arima3 and my_arima 5, we consider it as our best Arima model.
+
+
+
+
+
+```{r}
+my_NN <-  nnetar(Train, p=2, P=1, size=2)
+my_NN
+
+#forecast
+nn.pred <- forecast(my_NN, h=12)
+sqrt(mean(my_NN$residuals^2))
+accuracy(nn.pred, Valid)
+
+
+#plot
+autoplot(Train, series="Training") +
+  autolayer(nn.pred, series="Neural Network") +
+  autolayer(Valid, series = "Validation")+
+  theme_classic()
+```
+The best model is my_arima4 model.
+
+```{r}
+#resuduals analysis
+residual.analysis(model=my_arima4)
+```
+
+
 
 
 ```{r}
 #combine train and validation
-my_final_model <- arima(car_sales.ts, order = c(2 , 1, 6 ), seasonal = c(1 , 1, 1))
-my_final_model
-summary(my_final_model)
+my_final_model <- arima(car_sales.ts, order = c(2 , 1, 5 ), seasonal =c(1 , 1, 1))
+
 #forecast next 10 years
-forecast_10 <- forecast(my_final_model, h=120, level=0)
+forecast_10 <- predict(my_final_model , n.ahead=120)$pred
 forecast_10
+
 #plot
 autoplot(forecast_10)+
-  theme_classic() 
+  theme_classic()
 ```
-
-
 
